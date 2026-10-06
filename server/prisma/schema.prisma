@@ -1,0 +1,133 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  name      String
+  password  String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  profile      UserProfile?
+  interactions Interaction[]
+  feedback     Feedback[]
+  sessions     Session[]
+  aiInsights   AiInsight[]
+
+  @@map("users")
+}
+
+model UserProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  goal            String   @default("general")
+  interests       String   @default("[]") // JSON array stored as string
+  skillLevel      String   @default("beginner")
+  preferredStyle  String   @default("short")
+  availableTime   String   @default("30min")
+  personalNote    String   @default("")
+  currentFocus    String   @default("")
+  engagementScore Float    @default(0)
+  streak          Int      @default(0)
+  lastActiveDate  String   @default("")
+  completedItems  String   @default("[]") // JSON
+  savedItems      String   @default("[]") // JSON
+  skippedItems    String   @default("[]") // JSON
+  likedCategories String   @default("{}") // JSON map category -> score
+  dislikedCategories String @default("{}") // JSON
+  behavioralSignals String  @default("{}") // JSON
+  personalizationSummary String @default("")
+  pausePersonalization   Boolean @default(false)
+  onboardingComplete     Boolean @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("user_profiles")
+}
+
+model Content {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  category    String   // ai, webdev, business, design, etc.
+  type        String   // article, video, project, tutorial, challenge
+  difficulty  String   // beginner, intermediate, advanced
+  duration    String   // "15min", "30min", "1hr", "2hr+"
+  tags        String   @default("[]") // JSON array
+  goalTags    String   @default("[]") // which goals this serves
+  url         String   @default("")
+  imageUrl    String   @default("")
+  author      String   @default("")
+  createdAt   DateTime @default(now())
+
+  interactions  Interaction[]
+  feedback      Feedback[]
+
+  @@map("content")
+}
+
+model Interaction {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contentId   String?
+  content     Content? @relation(fields: [contentId], references: [id])
+  eventType   String   // VIEW, CLICK, SAVE, COMPLETE, SKIP, LIKE, DISLIKE, SEARCH, CHAT, PREFERENCE_CHANGE
+  metadata    String   @default("{}") // JSON
+  sessionId   String   @default("")
+  timestamp   DateTime @default(now())
+
+  @@index([userId, timestamp])
+  @@index([userId, eventType])
+  @@map("interactions")
+}
+
+model Feedback {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contentId   String
+  content     Content  @relation(fields: [contentId], references: [id])
+  action      String   // like, dislike, save, complete, skip
+  timestamp   DateTime @default(now())
+
+  @@unique([userId, contentId, action])
+  @@index([userId])
+  @@map("feedback")
+}
+
+model AiInsight {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      String   // behavioral_summary, recommendation_explanation, focus_suggestion
+  content   String
+  metadata  String   @default("{}") // JSON
+  createdAt DateTime @default(now())
+
+  @@index([userId, type])
+  @@map("ai_insights")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("sessions")
+}
