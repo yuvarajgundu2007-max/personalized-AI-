@@ -4,24 +4,14 @@ node_modules/
 .pnp
 .pnp.js
 
-# Environment variables
-.env
-.env.*
-**/.env
-**/.env.*
-!.env.example
-!**/.env.example
-
 # Production build outputs
 dist/
 build/
 **/dist/
 **/build/
 
-# Database
-*.db
+# Temporary DB journals
 *.db-journal
-**/*.db
 **/*.db-journal
 
 # Logs
