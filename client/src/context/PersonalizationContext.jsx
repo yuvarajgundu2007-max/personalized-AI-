@@ -73,6 +73,11 @@ export function PersonalizationProvider({ children }) {
     }
   }, []);
 
+  // Re-fetch profile + recommendations after preference changes or resets
+  const refreshPersonalization = useCallback(async () => {
+    await Promise.all([fetchProfile(), fetchRecommendations()]);
+  }, [fetchProfile, fetchRecommendations]);
+
   useEffect(() => {
     if (isAuthenticated) {
       fetchProfile();
@@ -90,6 +95,7 @@ export function PersonalizationProvider({ children }) {
       fetchRecommendations,
       recordFeedback,
       trackAction,
+      refreshPersonalization,
       setProfile,
     }}>
       {children}

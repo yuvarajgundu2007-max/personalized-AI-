@@ -156,7 +156,7 @@ Your responses must:
     const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
     const result = await model.generateContent(fullPrompt);
     return {
-      message: result.response.text(),
+      message: cleanMarkdown(result.response.text()),
       aiGenerated: true,
     };
   } catch (error) {
@@ -199,7 +199,7 @@ Keep it concise and user-friendly.
     const model = client.getGenerativeModel({ model: 'gemini-1.5-flash' });
     const result = await model.generateContent(prompt);
     return {
-      explanation: result.response.text(),
+      explanation: cleanMarkdown(result.response.text()),
       aiGenerated: true,
     };
   } catch (error) {
@@ -251,6 +251,11 @@ Return only valid JSON. If nothing relevant found, return empty arrays.
   } catch (error) {
     return { parsedAttributes: {}, aiGenerated: false };
   }
+}
+
+function cleanMarkdown(text) {
+  if (!text) return text;
+  return text.replace(/\*\*/g, '');
 }
 
 // ===== FALLBACK FUNCTIONS (no AI needed) =====
@@ -314,7 +319,7 @@ Is there something specific about **${interests[0] || profile.goal}** you'd like
   }
 
   return {
-    message: response,
+    message: cleanMarkdown(response),
     aiGenerated: false,
   };
 }
@@ -332,7 +337,7 @@ function generateFallbackExplanation(content, profile, matchReasons) {
   if (bullets.length === 0) bullets.push(`✓ Selected based on your **${profile.goal}** goal and **${profile.skillLevel}** level`);
 
   return {
-    explanation: bullets.join('\n'),
+    explanation: cleanMarkdown(bullets.join('\n')),
     aiGenerated: false,
   };
 }
@@ -344,4 +349,7 @@ module.exports = {
   parsePersonalNote,
   buildUserContext,
   safeJsonParse,
+  generateFallbackInsights,
+  generateFallbackChatResponse,
+  generateFallbackExplanation,
 };

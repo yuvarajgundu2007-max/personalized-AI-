@@ -37,8 +37,9 @@ const CONTENT_TYPES = [
 ];
 
 export default function Discover() {
-  const { profile, recommendations } = usePersonalization();
+  const { profile, recommendations: contextRecs } = usePersonalization();
   const [allContent, setAllContent] = useState([]);
+  const [scoredRecs, setScoredRecs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -46,13 +47,17 @@ export default function Discover() {
   const [selectedType, setSelectedType] = useState('all');
   const [sortBy, setSortBy] = useState('personalized'); // 'personalized' | 'newest' | 'title'
 
-  // Fetch complete catalog
+  // Fetch complete catalog + full personalized ranking (real scores for every item)
   useEffect(() => {
     async function loadContent() {
       try {
         setLoading(true);
-        const res = await contentAPI.getAll();
-        setAllContent(res.data.data || []);
+        const [contentRes, recsRes] = await Promise.all([
+          contentAPI.getAll({ limit: 50 }),
+          recommendationsAPI.get({ limit: 50 }),
+        ]);
+        setAllContent(contentRes.data.content || []);
+        setScoredRecs(recsRes.data.recommendations || []);
       } catch (err) {
         console.error('Failed to load catalog:', err);
       } finally {
@@ -62,20 +67,22 @@ export default function Discover() {
     loadContent();
   }, []);
 
-  // Map recommendation score & breakdown into items if available
+  // Map REAL recommendation scores into catalog items
   const recMap = useMemo(() => {
+    const source = scoredRecs.length > 0 ? scoredRecs : contextRecs;
     const map = new Map();
-    if (recommendations && recommendations.length > 0) {
-      recommendations.forEach((r) => {
+    if (source && source.length > 0) {
+      source.forEach((r) => {
         map.set(r.id, {
           personalizationScore: r.personalizationScore,
-          scoreBreakdown: r.scoreBreakdown,
+          scoreBreakdown: r.breakdown,
           matchReasons: r.matchReasons,
+          feedbackStatus: r.feedbackStatus,
         });
       });
     }
     return map;
-  }, [recommendations]);
+  }, [scoredRecs, contextRecs]);
 
   // Combine catalog with recommendation scoring
   const enrichedContent = useMemo(() => {
@@ -83,12 +90,14 @@ export default function Discover() {
       const recData = recMap.get(item.id);
       return {
         ...item,
-        personalizationScore: recData?.personalizationScore ?? (profile?.interests?.includes(item.category) ? 65 : 45),
+        // No fake fallback: items without a real engine score show no score badge
+        personalizationScore: recData?.personalizationScore ?? 0,
         scoreBreakdown: recData?.scoreBreakdown,
         matchReasons: recData?.matchReasons || [],
+        feedbackStatus: recData?.feedbackStatus || item.feedbackStatus,
       };
     });
-  }, [allContent, recMap, profile]);
+  }, [allContent, recMap]);
 
   // Filter & sort
   const filteredItems = useMemo(() => {
@@ -142,6 +151,10 @@ export default function Discover() {
     selectedDifficulty !== 'all' ||
     selectedType !== 'all' ||
     sortBy !== 'personalized';
+
+  // Show the two-tier "Personalized for You" / "Explore Everything" view
+  // only in the default unfiltered state
+  const showSections = !hasActiveFilters && filteredItems.length > 6;
 
   const resetFilters = () => {
     setSearch('');
@@ -298,16 +311,62 @@ export default function Discover() {
           ))}
         </div>
       ) : filteredItems.length > 0 ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {filteredItems.map((item) => (
-            <RecommendationCard
-              key={item.id}
-              item={item}
-              showExplain={true}
-              showFeedback={true}
-            />
-          ))}
-        </div>
+        showSections ? (
+          <>
+            {/* Personalized for You — top engine matches */}
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <Sparkles size={16} className="text-brand-400" />
+                <h2 className="text-base font-semibold text-white">Personalized for You</h2>
+              </div>
+              <p className="text-surface-400 text-xs mb-4">
+                Top matches from your personalization engine — ranked by goal, interests, skill and behavior.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {filteredItems.slice(0, 6).map((item) => (
+                  <RecommendationCard
+                    key={item.id}
+                    item={item}
+                    showExplain={true}
+                    showFeedback={true}
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Explore Everything — the full catalog */}
+            <div>
+              <div className="flex items-center gap-2 mb-1 mt-2">
+                <BookOpen size={16} className="text-surface-300" />
+                <h2 className="text-base font-semibold text-white">Explore Everything</h2>
+              </div>
+              <p className="text-surface-400 text-xs mb-4">
+                The complete catalog — still scored and sorted by your personal profile.
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {filteredItems.slice(6).map((item) => (
+                  <RecommendationCard
+                    key={item.id}
+                    item={item}
+                    showExplain={true}
+                    showFeedback={true}
+                  />
+                ))}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredItems.map((item) => (
+              <RecommendationCard
+                key={item.id}
+                item={item}
+                showExplain={true}
+                showFeedback={true}
+              />
+            ))}
+          </div>
+        )
       ) : (
         <div className="card p-12 text-center max-w-md mx-auto space-y-4">
           <div className="w-12 h-12 rounded-2xl bg-surface-800 flex items-center justify-center mx-auto text-surface-400">

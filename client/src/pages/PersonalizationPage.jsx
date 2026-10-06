@@ -54,7 +54,8 @@ export default function PersonalizationPage() {
   };
 
   const profile = personalizationData?.profile || contextProfile;
-  const signals = personalizationData?.signals || profile?.behavioralSignals || {};
+  const signals = profile?.behavioralSignals || {};
+  const behavioral = personalizationData?.behavioral || null;
   const weights = personalizationData?.scoringWeights || {
     goalMatch: 0.28,
     interestMatch: 0.22,
@@ -64,21 +65,38 @@ export default function PersonalizationPage() {
     styleMatch: 0.05,
   };
 
-  // Safe parse liked categories
-  let likedMap = {};
-  try {
-    likedMap = typeof profile?.likedCategories === 'string'
-      ? JSON.parse(profile.likedCategories)
-      : (profile?.likedCategories || {});
-  } catch (_) {}
+  // Real engine confidence from the AI insights payload (never hardcoded)
+  const confidence = insights?.personalizationConfidence;
+  const engineConfidence = confidence
+    ? Math.round(
+        (Object.values(confidence).reduce((a, b) => a + b, 0) /
+          Object.values(confidence).length) * 100
+      )
+    : null;
 
-  // Safe parse disliked categories
+  // Real learned affinities from the engine (category -> accumulated score)
+  let likedMap = {};
+  if (behavioral?.topCategories) {
+    behavioral.topCategories.forEach((c) => { likedMap[c.category] = Math.round(c.score); });
+  } else {
+    try {
+      likedMap = typeof profile?.likedCategories === 'string'
+        ? JSON.parse(profile.likedCategories)
+        : (profile?.likedCategories || {});
+    } catch (_) {}
+  }
+
+  // Disliked categories (real suppression signals)
   let dislikedMap = {};
-  try {
-    dislikedMap = typeof profile?.dislikedCategories === 'string'
-      ? JSON.parse(profile.dislikedCategories)
-      : (profile?.dislikedCategories || {});
-  } catch (_) {}
+  if (behavioral?.dislikedCategories) {
+    behavioral.dislikedCategories.forEach((c) => { dislikedMap[c.category] = Math.round(c.score); });
+  } else {
+    try {
+      dislikedMap = typeof profile?.dislikedCategories === 'string'
+        ? JSON.parse(profile.dislikedCategories)
+        : (profile?.dislikedCategories || {});
+    } catch (_) {}
+  }
 
   return (
     <div className="space-y-6 pb-12">
@@ -123,22 +141,45 @@ export default function PersonalizationPage() {
             </h2>
           </div>
           <span className="text-[11px] font-mono text-brand-300 bg-brand-500/10 px-2.5 py-0.5 rounded-full border border-brand-500/20">
-            Engine Confidence: 96.8%
+            {engineConfidence !== null
+              ? `Engine Confidence: ${engineConfidence}%`
+              : 'Confidence: building…'}
           </span>
         </div>
 
         <p className="text-surface-200 text-sm md:text-base leading-relaxed bg-surface-950/40 p-4 rounded-xl border border-white/5">
           "{profile?.personalizationSummary ||
+            insights?.behavioralSummary ||
             insights?.summary ||
-            'Your persona reflects a focused learner seeking actionable, high-impact modules. Recommendations prioritize foundational clarity and immediate hands-on implementation.'}"
+            'Interact with a few recommendations and your AI persona summary will appear here, generated from your actual behavior.'}"
         </p>
 
-        {insights?.suggestedFocus && (
+        {(insights?.currentFocusSuggestion || insights?.suggestedFocus) && (
           <div className="flex items-start gap-3 p-3 rounded-xl bg-accent-500/10 border border-accent-500/20 text-xs">
             <Sparkles size={16} className="text-accent-400 flex-shrink-0 mt-0.5" />
             <div>
               <span className="text-accent-300 font-semibold">Recommended Milestone Focus: </span>
-              <span className="text-surface-200">{insights.suggestedFocus}</span>
+              <span className="text-surface-200">{insights?.currentFocusSuggestion || insights?.suggestedFocus}</span>
+            </div>
+          </div>
+        )}
+
+        {insights?.aiLearningNote && (
+          <div className="flex items-start gap-3 p-3 rounded-xl bg-brand-500/10 border border-brand-500/20 text-xs">
+            <Brain size={16} className="text-brand-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <span className="text-brand-300 font-semibold">How the AI is learning you: </span>
+              <span className="text-surface-200">{insights.aiLearningNote}</span>
+            </div>
+          </div>
+        )}
+
+        {insights?.recommendationPreference && (
+          <div className="flex items-start gap-3 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs">
+            <ThumbsUp size={16} className="text-emerald-400 flex-shrink-0 mt-0.5" />
+            <div>
+              <span className="text-emerald-300 font-semibold">Recommendation preference: </span>
+              <span className="text-surface-200">{insights.recommendationPreference}</span>
             </div>
           </div>
         )}
@@ -261,7 +302,9 @@ export default function PersonalizationPage() {
                   >
                     <span className="text-white font-medium capitalize">{item}</span>
                     <span className="text-[10px] px-1.5 py-0.5 rounded bg-brand-500/20 text-brand-300 font-mono">
-                      +{likedScore + 3} affinity
+                      {likedMap[item]
+                        ? `+${likedMap[item]} affinity`
+                        : 'observing'}
                     </span>
                   </div>
                 );
@@ -291,19 +334,19 @@ export default function PersonalizationPage() {
               <div className="p-2.5 rounded-lg bg-surface-950/40 border border-white/5">
                 <span className="text-surface-500 text-[10px]">Avg Session</span>
                 <p className="text-white font-mono font-medium mt-0.5">
-                  {signals.avgSessionMinutes ? `${signals.avgSessionMinutes} mins` : '20 mins'}
+                  {signals.avgSessionMinutes ? `${signals.avgSessionMinutes} mins` : '—'}
                 </p>
               </div>
               <div className="p-2.5 rounded-lg bg-surface-950/40 border border-white/5">
                 <span className="text-surface-500 text-[10px]">Completion Rate</span>
                 <p className="text-emerald-400 font-mono font-medium mt-0.5">
-                  {signals.completionRate ? `${Math.round(signals.completionRate * 100)}%` : '85%'}
+                  {signals.completionRate ? `${Math.round(signals.completionRate * 100)}%` : '—'}
                 </p>
               </div>
               <div className="p-2.5 rounded-lg bg-surface-950/40 border border-white/5">
                 <span className="text-surface-500 text-[10px]">Learning Velocity</span>
                 <p className="text-brand-300 font-medium capitalize mt-0.5">
-                  {signals.learningVelocity || 'Steady'}
+                  {signals.learningVelocity || '—'}
                 </p>
               </div>
             </div>

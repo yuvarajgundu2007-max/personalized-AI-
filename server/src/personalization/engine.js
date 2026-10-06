@@ -229,6 +229,12 @@ async function updateProfileFromInteraction(userId, eventType, contentId, metada
   const profile = await prisma.userProfile.findUnique({ where: { userId } });
   if (!profile) return;
 
+  // User control: when personalization is paused, log the event but
+  // do NOT evolve the behavioral profile (spec: privacy controls must work)
+  if (profile.pausePersonalization) {
+    return { paused: true };
+  }
+
   const content = contentId ? await prisma.content.findUnique({ where: { id: contentId } }) : null;
 
   let updates = {};

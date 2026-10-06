@@ -63,14 +63,14 @@ export default function Assistant() {
       }));
 
       const res = await aiAPI.chat(text, historyPayload);
-      const aiResponseText = res.data.data.reply || res.data.data.message || 'I processed your request using your personalized profile context.';
+      const aiResponseText = res.data.message || res.data.reply || 'I processed your request using your personalized profile context.';
 
       const botMessage = {
         id: (Date.now() + 1).toString(),
         role: 'assistant',
         content: aiResponseText,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        source: res.data.data.source || 'gemini',
+        source: res.data.aiGenerated ? 'gemini' : 'behavioral-engine',
       };
 
       setMessages((prev) => [...prev, botMessage]);

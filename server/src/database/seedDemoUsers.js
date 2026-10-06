@@ -100,7 +100,15 @@ async function seedDemoUsers() {
       {
         userId: priya.id,
         type: 'behavioral_summary',
-        content: 'Priya demonstrates strong engagement with short-form AI fundamentals. She completes bite-sized articles within 15 minutes and frequently saves prompt engineering modules.',
+        content: JSON.stringify({
+          behavioralSummary: 'Priya demonstrates strong engagement with short-form AI fundamentals. She completes bite-sized articles within 15 minutes and frequently saves prompt engineering modules, indicating a preference for practical, immediately-applicable content.',
+          currentFocusSuggestion: 'Bridge your React experience with AI by creating a small prompt playground or UI wrapper for LLM calls.',
+          recommendationPreference: 'Short practical tutorials in AI perform best for you — long-form advanced content tends to get skipped.',
+          aiLearningNote: 'Your recent interactions suggest increasing interest in AI engineering over general web development.',
+          engagementTip: 'Complete one 15-minute AI article per session to keep your streak growing.',
+          personalizationConfidence: { goals: 0.94, interests: 0.88, style: 0.92, behavior: 0.85 },
+          aiGenerated: false
+        }),
         metadata: JSON.stringify({ confidence: 0.94, dominantGoal: 'learn-ai' })
       },
       {
@@ -178,7 +186,15 @@ async function seedDemoUsers() {
       {
         userId: alex.id,
         type: 'behavioral_summary',
-        content: 'Alex prioritizes advanced architecture and startup scaling. His sessions are long (45+ mins) with strong focus on RAG, fine-tuning, and monetization frameworks.',
+        content: JSON.stringify({
+          behavioralSummary: 'Alex prioritizes advanced architecture and startup scaling. His sessions are long (45+ mins) with strong focus on RAG, fine-tuning, and monetization frameworks — introductory content is consistently skipped.',
+          currentFocusSuggestion: 'Examine hybrid vector search and token-cost optimization for multi-tenant LLM agents before scaling your MVP infrastructure.',
+          recommendationPreference: 'Project-based and challenge content in AI + Business performs best for you.',
+          aiLearningNote: 'Your behavior shows a shift from pure engineering topics toward business-technical hybrid content.',
+          engagementTip: 'Tackle one advanced architecture project this week to test your scaling assumptions.',
+          personalizationConfidence: { goals: 0.97, interests: 0.91, style: 0.89, behavior: 0.93 },
+          aiGenerated: false
+        }),
         metadata: JSON.stringify({ confidence: 0.97, dominantGoal: 'build-startup' })
       },
       {

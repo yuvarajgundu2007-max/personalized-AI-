@@ -15,32 +15,37 @@ router.get('/', asyncHandler(async (req, res) => {
   if (category) whereClause.category = category;
   if (difficulty) whereClause.difficulty = difficulty;
   if (type) whereClause.type = type;
-  if (search) {
-    whereClause.OR = [
-      { title: { contains: search } },
-      { description: { contains: search } },
-    ];
-  }
+  // NOTE: search is applied in JS below so it is case-insensitive on both
+  // SQLite (local dev) and PostgreSQL (production)
 
-  const [content, total] = await Promise.all([
-    prisma.content.findMany({
-      where: whereClause,
-      take: Math.min(parseInt(limit), 50),
-      skip: parseInt(offset),
-      orderBy: { createdAt: 'desc' },
-    }),
-    prisma.content.count({ where: whereClause }),
-  ]);
+  const allMatching = await prisma.content.findMany({
+    where: whereClause,
+    take: 500,
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const searchTerm = (search || '').trim().toLowerCase();
+  const filtered = searchTerm
+    ? allMatching.filter(c =>
+        c.title.toLowerCase().includes(searchTerm) ||
+        c.description.toLowerCase().includes(searchTerm) ||
+        safeJsonParse(c.tags, []).some(t => t.toLowerCase().includes(searchTerm))
+      )
+    : allMatching;
+
+  const start = parseInt(offset);
+  const end = start + Math.min(parseInt(limit), 50);
+  const content = filtered.slice(start, end).map(c => ({
+    ...c,
+    tags: safeJsonParse(c.tags, []),
+    goalTags: safeJsonParse(c.goalTags, []),
+  }));
 
   res.json({
-    content: content.map(c => ({
-      ...c,
-      tags: safeJsonParse(c.tags, []),
-      goalTags: safeJsonParse(c.goalTags, []),
-    })),
-    total,
+    content,
+    total: filtered.length,
     limit: parseInt(limit),
-    offset: parseInt(offset),
+    offset: start,
   });
 }));
 

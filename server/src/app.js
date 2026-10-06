@@ -17,6 +17,18 @@ const { errorHandler } = require('./middleware/errorHandler');
 
 const app = express();
 
+// Fail fast on missing JWT secret in production; safe dev fallback otherwise.
+// Never commit real secrets — this guard exists so a fresh clone cannot
+// silently sign tokens with an empty secret.
+if (!process.env.JWT_SECRET) {
+  if (process.env.NODE_ENV === 'production') {
+    console.error('FATAL: JWT_SECRET environment variable is required in production.');
+    process.exit(1);
+  }
+  console.warn('⚠️  JWT_SECRET not set — using an insecure development default. Set JWT_SECRET in server/.env before deploying.');
+  process.env.JWT_SECRET = 'dev-only-insecure-default-do-not-use-in-production';
+}
+
 // Security
 app.use(helmet());
 app.use(cors({
@@ -47,7 +59,9 @@ const aiLimiter = rateLimit({
 });
 
 app.use(limiter);
-app.use(morgan('combined'));
+if (process.env.NODE_ENV !== 'test') {
+  app.use(morgan('combined'));
+}
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true }));
 
@@ -65,6 +79,22 @@ app.use('/api/interactions', interactionsRoutes);
 app.use('/api/personalization', personalizationRoutes);
 app.use('/api/ai', aiLimiter, aiRoutes);
 app.use('/api/content', contentRoutes);
+
+// Optional single-service mode: serve the built client from the same server
+// (used for demo previews and simple Render/Railway deployments)
+const fs = require('fs');
+const path = require('path');
+const clientDist = path.join(__dirname, '..', '..', 'client', 'dist');
+if (process.env.NODE_ENV !== 'test' && fs.existsSync(clientDist)) {
+  app.use(express.static(clientDist));
+  // SPA history fallback — must precede the API 404 handler below
+  app.get('*', (req, res) => {
+    if (req.path.startsWith('/api/')) {
+      return res.status(404).json({ error: 'Route not found' });
+    }
+    res.sendFile(path.join(clientDist, 'index.html'));
+  });
+}
 
 // 404
 app.use('*', (req, res) => {

@@ -11,7 +11,8 @@
     "db:seed": "node src/database/seed.js",
     "db:seed:demo": "node src/database/seedDemoUsers.js",
     "db:studio": "prisma studio",
-    "test": "jest --forceExit --detectOpenHandles"
+    "db:setup": "prisma generate && prisma db push && node src/database/seed.js && node src/database/seedDemoUsers.js",
+    "test": "jest --runInBand --forceExit"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",

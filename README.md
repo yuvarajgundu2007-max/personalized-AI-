@@ -108,15 +108,11 @@ To immediately experience contrasting personalized models without manual onboard
 cd server
 npm install
 
-# Push database schema & generate Prisma Client
-npm run db:push
-npm run db:generate
+# Copy the example env (DATABASE_URL, JWT_SECRET, optional GEMINI_API_KEY)
+cp .env.example .env
 
-# Seed 36 curated learning resources
-npm run db:seed
-
-# Seed the two demo accounts (Priya & Alex)
-npm run db:seed:demo
+# One command: generate Prisma Client + push schema + seed content + seed demo users
+npm run db:setup
 
 # Start the backend server (runs on port 3001)
 npm run dev
@@ -131,43 +127,202 @@ npm install
 npm run dev
 ```
 
-Visit **`http://localhost:5173`** in your browser.
+Visit **`http://localhost:5173`** in your browser. Sign in with a demo account (quick-fill buttons on the login page) or register a new account and complete onboarding.
+
+> **No Gemini API key?** Everything still works — the deterministic behavioral engine takes over insights and chat until you add `GEMINI_API_KEY` to `server/.env`.
 
 ---
 
-## 🧭 Application Tour & Feature Highlights
+## 🗄️ Database Schema (Prisma)
 
-### 1. Dynamic Dashboard (`/dashboard`)
-* AI-generated greeting and daily adaptive insight card.
-* **"Why this recommendation?"** modal breakdown on every card revealing the exact score weights.
-* Instant feedback actions: 👍 Like, 👎 Dislike, 🔖 Save, ✅ Complete, ⏩ Skip.
-* Engaging statistics: streak counter, engagement score, catalog completion.
+```
+users            ├─ id, name, email (unique), password (bcrypt hash), timestamps
+user_profiles    ├─ 1:1 with users — goal, interests, skillLevel, preferredStyle,
+                 │   availableTime, personalNote, currentFocus, engagementScore,
+                 │   streak, lastActiveDate, completedItems, savedItems,
+                 │   skippedItems, likedCategories, dislikedCategories,
+                 │   behavioralSignals, personalizationSummary,
+                 │   pausePersonalization, onboardingComplete
+content          ├─ title, description, category, type, difficulty, duration,
+                 │   tags, goalTags, imageUrl, author
+interactions     ├─ userId → users, contentId → content, eventType
+                 │   (VIEW/CLICK/SAVE/COMPLETE/SKIP/LIKE/DISLIKE/SEARCH/CHAT/
+                 │   PREFERENCE_CHANGE), metadata, timestamp
+                 │   Indexed on (userId, timestamp) and (userId, eventType)
+feedback         ├─ userId → users, contentId → content, action
+                 │   Unique on (userId, contentId, action)
+ai_insights      ├─ userId → users, type, content, metadata
+sessions         ├─ userId → users, token, expiresAt
+```
 
-### 2. Intelligent Content Discovery (`/discover`)
-* Search across all 36 topics with instant multi-factor filtering (Categories, Difficulty, Format).
-* Sort by **AI Match (Highest)** to see personalized rankings recalculate.
+All relations use foreign keys with `onDelete: Cascade` where appropriate. Behavioral JSON blobs live in `user_profiles` to keep the hot scoring path a single-table read.
 
-### 3. Context-Aware AI Copilot (`/assistant`)
-* Live chat with Google Gemini trained with active learner parameters in system prompt memory.
-* Live inspector sidebar showing active AI memory: goal, skill level, interests, and recent session notes.
-* Chat interactions stream back into the recommendation engine.
+---
 
-### 4. Learning Analytics & Growth (`/progress`)
-* Recharts **7-Day Velocity Chart** tracking daily interactions vs. completions.
-* **Topic Affinity Distribution** horizontal bar graph.
-* Explicit feedback audit breakdown (+ weights for likes/saves/completions).
-* Adaptive Milestone unlocks.
+## 🔌 API Reference
 
-### 5. "How the AI Understands You" (`/personalization`)
-* Neural Persona Formulation summary with confidence score.
-* Visual transparent breakdown of the 6-dimension scoring formula.
-* Learned affinities matrix.
-* **"Recalibrate AI Persona"** button for immediate on-demand model training.
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/health` | Health check (no auth) |
+| `POST` | `/api/auth/register` | Create account (Zod validation, bcrypt hashing) |
+| `POST` | `/api/auth/login` | Obtain JWT |
+| `GET` | `/api/auth/me` | Current user + profile summary (auth) |
+| `GET` | `/api/profile` | Full personalization profile (auth) |
+| `PUT` | `/api/profile` | Onboarding / profile update; AI-parses the personal note |
+| `GET` | `/api/preferences` | Explicit preference settings |
+| `PUT` | `/api/preferences` | Update preferences (logs `PREFERENCE_CHANGE`) |
+| `DELETE` | `/api/preferences/history` | Clear activity history & behavioral signals |
+| `POST` | `/api/preferences/reset` | Full personalization reset |
+| `GET` | `/api/recommendations` | Ranked recommendations with score breakdowns |
+| `POST` | `/api/recommendations/:id/feedback` | like / dislike / save / complete / skip |
+| `GET` | `/api/recommendations/:id/explain` | "Why this?" — score breakdown + explanation |
+| `POST` | `/api/recommendations/:id/action` | click / view tracking |
+| `POST` | `/api/interactions` | Record a behavioral event |
+| `GET` | `/api/interactions` | Recent interaction history |
+| `GET` | `/api/personalization/profile` | Behavioral summary (top categories, events) |
+| `GET` | `/api/personalization/insights` | AI insights (30-min cache) |
+| `POST` | `/api/personalization/refresh` | Force insight re-generation |
+| `GET` | `/api/personalization/analytics` | Charts data: 7-day activity, categories, feedback |
+| `POST` | `/api/ai/chat` | Personalized AI assistant |
+| `POST` | `/api/ai/personalize` | Regenerate personalization summary |
+| `GET` | `/api/content` | Full catalog with search + filters |
 
-### 6. Transparency & Ethical AI Controls (`/settings`)
-* Edit goals, skill level, format, and available time anytime.
-* **Pause Dynamic Personalization:** Freezes persona adaptation for unbiased discovery.
-* **Clear Activity History & Reset Model:** Full data sovereignty.
+All authenticated routes expect `Authorization: Bearer <token>`. Responses use a consistent JSON shape; errors return `{ "error": "..." }` with proper status codes.
+
+---
+
+## 🔐 Environment Variables
+
+### `server/.env` (copy from `server/.env.example`)
+```env
+DATABASE_URL="file:./dev.db"     # SQLite locally; PostgreSQL URL in production
+JWT_SECRET="change-me"           # Long random string in production
+JWT_EXPIRES_IN="7d"
+GEMINI_API_KEY=""                # Optional — deterministic fallback works without it
+CLIENT_URL="http://localhost:5173"
+PORT=3001
+NODE_ENV="development"
+```
+
+### `client/.env` (copy from `client/.env.example`)
+```env
+VITE_API_URL=http://localhost:3001/api
+```
+
+`.env` files are git-ignored and never committed. The Gemini key only ever exists server-side — the client bundle contains no AI credentials.
+
+---
+
+## 🧪 Testing
+
+The backend ships with **49 automated tests** (Jest + Supertest) covering:
+
+* **Authentication** — registration validation, duplicate rejection, bcrypt hashing verification, login, tampered/expired JWT rejection
+* **Personalization engine** — unit tests for the 6-factor scoring function, behavior→profile→re-rank integration tests, dislike suppression, pause flag enforcement
+* **Recommendations API** — ranking order, per-user differentiation (User A vs User B receive opposite rankings), feedback validation, explanation endpoint
+* **AI fallback** — insights/chat degrade gracefully with zero API keys, insight cache stored as valid JSON
+* **Content & interactions** — case-insensitive search, filters, event validation, cross-user data isolation
+* **User controls** — history clearing, full personalization reset
+
+```bash
+cd server
+npm test
+```
+
+Tests run against an isolated `test.db` (auto-created via `prisma db push --force-reset`), never touching your dev database.
+
+---
+
+## 🚀 Deployment
+
+### Frontend → Vercel / Netlify
+```bash
+cd client && npm run build   # outputs to client/dist
+```
+Set `VITE_API_URL` to your production API URL (e.g. `https://your-api.render.com/api`).
+
+### Backend → Render / Railway / Fly.io
+* Start command: `npm start` (runs `node src/app.js`)
+* Set `NODE_ENV=production`, `JWT_SECRET`, `CLIENT_URL` (your deployed frontend origin), and `GEMINI_API_KEY`
+* CORS is configured from `CLIENT_URL`; request logging is disabled outside development
+
+### Database → PostgreSQL (Supabase / Neon / Railway)
+The Prisma schema is provider-agnostic. To switch from the zero-config SQLite dev database to PostgreSQL:
+
+```prisma
+// server/prisma/schema.prisma
+datasource db {
+  provider = "postgresql"            // was "sqlite"
+  url      = env("DATABASE_URL")     // e.g. postgresql://user:pass@host:5432/adaptiveai
+}
+```
+
+```bash
+npm run db:push && npm run db:seed && npm run db:seed:demo
+```
+
+All queries already run through Prisma's parameterized engine, so no query changes are required.
+
+---
+
+## 🎬 3-Minute Hackathon Demo Script
+
+| Time | Action | What to say / show |
+| :--- | :--- | :--- |
+| 0:00–0:20 | Landing page | "Most applications treat everyone the same. AdaptiveAI learns you." |
+| 0:20–0:50 | Login as **Priya** (quick-fill) | Show the dashboard: short AI articles, beginner level, "Good morning, Priya" |
+| 0:50–1:20 | Open any card's **"Why this recommendation?"** | Reveal the exact 6-factor score breakdown — full transparency |
+| 1:20–2:00 | 👍 Like one AI item, 👎 dislike a web-dev item, ✅ complete another | Watch the toast feedback, then click **Refresh** — the feed visibly re-ranks |
+| 2:00–2:30 | Open **Personalization** page | "How the AI Understands You" — live affinities, engine confidence, AI learning note |
+| 2:30–3:00 | Ask the **AI Assistant**: "What should I focus on today?" | The answer references her actual goal, streak, and focus — not a generic reply |
+| 3:00–3:40 | Logout → Login as **Alex** (quick-fill) | Completely different dashboard: RAG pipelines, startup monetization, advanced projects |
+| 3:40–4:00 | Close on **Activity** page | "Same app, same engine — a different experience per person. It doesn't just use AI; it learns from you." |
+
+---
+
+## 🗺️ Project Structure
+
+```
+personalized-AI-/
+├── client/                  # React 19 + Vite frontend
+│   └── src/
+│       ├── api/             # Axios instance + endpoint modules
+│       ├── components/      # RecommendationCard, etc.
+│       ├── context/         # AuthContext, PersonalizationContext
+│       ├── layouts/         # DashboardLayout (sidebar + responsive nav)
+│       ├── pages/           # Landing, Login, Register, Onboarding, Dashboard,
+│       │                    # Discover, Assistant, Progress, Personalization,
+│       │                    # Activity, Settings
+│       └── index.css        # Tailwind + bespoke design system
+├── server/                  # Express + Prisma backend
+│   ├── prisma/              # schema.prisma
+│   ├── src/
+│   │   ├── ai/              # aiService.js — Gemini + deterministic fallbacks
+│   │   ├── database/        # prisma client + seed scripts
+│   │   ├── middleware/      # JWT auth, global error handler
+│   │   ├── personalization/ # engine.js — scoring + profile evolution
+│   │   ├── routes/          # auth, profile, preferences, recommendations,
+│   │   │                    # interactions, personalization, ai, content
+│   │   └── app.js
+│   └── tests/               # 49 Jest + Supertest tests
+└── README.md
+```
+
+---
+
+## 🔮 Future Improvements
+* Content-based embeddings for semantic similarity between items
+* Contextual bandits (exploration/exploitation) instead of fixed score weights
+* Collaborative filtering once the user base grows
+* Dwell-time telemetry via Intersection Observer for implicit signal richness
+* Streaming AI responses (SSE) in the assistant
+* Notification digest personalized to each user's available time window
+
+---
+
+## 📄 License
+
+MIT — built for the **Personalized AI Experiences** hackathon.
 
 ---
 

@@ -29,6 +29,7 @@ const STYLES = [
   { id: 'short', label: '⚡ Bite-sized / Short', desc: '10-15 min articles & concepts' },
   { id: 'practical', label: '🛠 Hands-on / Practical', desc: 'Real projects & code-along' },
   { id: 'detailed', label: '📚 Deep Dive / Theory', desc: 'Exhaustive end-to-end guides' },
+  { id: 'visual', label: '🎨 Visual Learning', desc: 'Diagrams, demos & examples' },
   { id: 'challenge', label: '🏆 Problem Challenges', desc: 'Active quizzes & CTF challenges' },
 ];
 

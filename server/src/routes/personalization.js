@@ -30,7 +30,7 @@ router.get('/insights', asyncHandler(async (req, res) => {
     take: 20,
   });
 
-  // Check if we have cached insights (less than 30 min old)
+  let insights;
   const cachedInsight = await prisma.aiInsight.findFirst({
     where: {
       userId: req.user.id,
@@ -40,10 +40,11 @@ router.get('/insights', asyncHandler(async (req, res) => {
     orderBy: { createdAt: 'desc' },
   });
 
-  let insights;
-  if (cachedInsight) {
-    insights = safeJsonParse(cachedInsight.content, {});
-    insights.cached = true;
+  const cached = cachedInsight ? safeJsonParse(cachedInsight.content, null) : null;
+
+  if (cached && cached.behavioralSummary) {
+    // Only use the cache when it contains a valid insights payload
+    insights = { ...cached, cached: true };
   } else {
     insights = await generatePersonalizationInsights(profile, recentInteractions);
 
